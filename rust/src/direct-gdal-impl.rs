@@ -55,10 +55,10 @@ fn main() {
     let start = Instant::now();
     
     // Path to data
-    let granule_path = "../../data/";
+    let granule_path = "../data/";
     let nir_path = format!("{}T33TTG_20250305T100029_B8A_20m.jp2", granule_path);
-    let red_path = format!("{}/T33TTG_20250305T100029_B04_20m.jp2", granule_path);
-    let output_path = "../../output/rust_direct_gdal.tif";
+    let red_path = format!("{}T33TTG_20250305T100029_B04_20m.jp2", granule_path);
+    let output_path = "../output/rust_direct_gdal.tif";
     
     // Constants
     let scale_factor = 10000.0;

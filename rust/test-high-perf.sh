@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Set GDAL environment variable
 export GDAL_INCLUDE_DIR=/usr/include/gdal
@@ -8,14 +9,14 @@ export RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat"
 
 # Save the high-performance implementation
 cp src/main.rs src/main.rs.bak
-cat high-perf-impl.rs > src/main.rs
+cat src/high-perf-impl.rs > src/main.rs
 
 # Rebuild with aggressive optimizations
 cargo clean
 cargo build --release
 
 echo "Running high-performance test..."
-time ./target/release/ndvi_calculator
+time ./target/release/geo-spectra-calc
 
-# Restore original implementation if needed
-# cp src/main.rs.bak src/main.rs
+# Restore original implementation
+cp src/main.rs.bak src/main.rs

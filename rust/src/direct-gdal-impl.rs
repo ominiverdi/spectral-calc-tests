@@ -172,8 +172,9 @@ fn main() {
             
             // Calculate NDVI in parallel
             ndvi_data.par_iter_mut().enumerate().for_each(|(i, ndvi)| {
-                let nir = nir_data[i] / scale_factor as f32;
-                let red = red_data[i] / scale_factor as f32;
+                // Apply both scale factor and offset: (DN + offset) / scale_factor
+                let nir = (nir_data[i] - 1000.0) / scale_factor as f32;
+                let red = (red_data[i] - 1000.0) / scale_factor as f32;
                 
                 *ndvi = if nir + red > 0.0 {
                     (nir - red) / (nir + red)

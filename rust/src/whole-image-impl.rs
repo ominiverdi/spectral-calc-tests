@@ -82,8 +82,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Process the entire image in parallel
     ndvi_vec.par_iter_mut().enumerate().for_each(|(i, ndvi)| {
-        let nir = nir_vec[i] / scale_factor;
-        let red = red_vec[i] / scale_factor;
+        // Apply both scale factor and offset: (DN + offset) / scale_factor
+        let nir = (nir_vec[i] - 1000.0) / scale_factor;
+        let red = (red_vec[i] - 1000.0) / scale_factor;
         
         *ndvi = if nir + red > 0.0 {
             (nir - red) / (nir + red)

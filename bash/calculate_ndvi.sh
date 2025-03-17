@@ -15,7 +15,7 @@ mkdir -p ../output
 # with correction
 
 time gdal_calc.py \
-  --calc="numpy.where((A+B)>0, (A/10000.0-B/10000.0)/(A/10000.0+B/10000.0), -999)" \
+  --calc="numpy.where(((A-1000)/10000.0+(B-1000)/10000.0)>0, ((A-1000)/10000.0-(B-1000)/10000.0)/((A-1000)/10000.0+(B-1000)/10000.0), -999)" \
   -A $NIR_BAND \
   -B $RED_BAND \
   --outfile=$OUTPUT_FILE \

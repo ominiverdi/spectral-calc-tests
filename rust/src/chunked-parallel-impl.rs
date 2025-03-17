@@ -99,8 +99,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Calculate NDVI for each pixel in the chunk (in parallel)
         ndvi_chunk.par_iter_mut().enumerate().for_each(|(i, ndvi)| {
             let global_idx = start_idx + i;
-            let nir = nir_vec[global_idx] / scale_factor as f32;
-            let red = red_vec[global_idx] / scale_factor as f32;
+            // Apply both scale factor and offset: (DN + offset) / scale_factor
+            let nir = (nir_vec[global_idx] - 1000.0) / scale_factor as f32;
+            let red = (red_vec[global_idx] - 1000.0) / scale_factor as f32;
             
             *ndvi = if nir + red > 0.0 {
                 (nir - red) / (nir + red)

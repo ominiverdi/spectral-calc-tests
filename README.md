@@ -106,6 +106,20 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 | C | 10.264 | Direct GDAL C API implementation |
 | Bash (gdal_calc.py) | 12.165 | Uses GDAL command-line utilities |
 
+## Compiler Optimization Results
+
+Tests of different Rust compiler flags on the whole-image implementation (10m resolution):
+
+| Optimization | Flags | Runtime (s) |
+|--------------|-------|-------------|
+| Baseline | `-C target-cpu=native -C opt-level=3` | 3.478 |
+| Single codegen unit | `-C target-cpu=native -C opt-level=3 -C codegen-units=1` | 3.674 |
+| Panic abort | `-C target-cpu=native -C opt-level=3 -C panic=abort` | 3.732 |
+| Maximum (no LTO) | `-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort` | 3.733 |
+| Cache-friendly implementation | `-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort` | 3.372 |
+
+Interestingly, the baseline optimization performs better than more aggressive compiler flags, but manual cache-friendly optimizations provide the best performance overall. This suggests that algorithm-level optimizations are more impactful than compiler flags for this workload.
+
 ## License
 
 MIT License - See LICENSE file for details.

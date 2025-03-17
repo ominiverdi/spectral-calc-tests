@@ -25,18 +25,16 @@ cp src/whole-image-impl.rs src/main.rs
 # Define the flags combinations to test
 declare -a RUST_FLAGS_VARIANTS=(
     "-C target-cpu=native -C opt-level=3"
-    "-C target-cpu=native -C opt-level=3 -C lto=thin"
-    "-C target-cpu=native -C opt-level=3 -C lto=fat"
-    "-C target-cpu=native -C opt-level=3 -C lto=fat -C codegen-units=1"
-    "-C target-cpu=native -C opt-level=3 -C lto=fat -C codegen-units=1 -C panic=abort"
+    "-C target-cpu=native -C opt-level=3 -C codegen-units=1"
+    "-C target-cpu=native -C opt-level=3 -C panic=abort"
+    "-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort"
 )
 
 declare -a VARIANT_NAMES=(
     "Baseline (opt-level=3)"
-    "With thin LTO"
-    "With fat LTO"
-    "With fat LTO + single codegen unit"
-    "Maximum optimization"
+    "Single codegen unit"
+    "With panic=abort"
+    "Maximum optimization (no LTO)"
 )
 
 # Function to run the benchmark with specific flags
@@ -49,8 +47,9 @@ run_benchmark() {
     echo "Flags: $flags"
     
     # Clean and rebuild with the specified flags
-    cargo clean
-    RUSTFLAGS="$flags" cargo build --release
+    cargo clean > /dev/null
+    echo "Building with flags..."
+    RUSTFLAGS="$flags" cargo build --release > /dev/null
     
     echo "Running benchmark..."
     # Run 3 times and take the average
@@ -84,138 +83,179 @@ for i in "${!RUST_FLAGS_VARIANTS[@]}"; do
     run_benchmark "${RUST_FLAGS_VARIANTS[$i]}" "${VARIANT_NAMES[$i]}"
 done
 
-# Test SIMD-optimized version if x86_64 architecture
-if [ "$(uname -m)" == "x86_64" ]; then
-    echo "----------------------------------------------"
-    echo "Testing: SIMD-optimized implementation"
-    
-    # Backup current implementation
-    cp src/main.rs src/main.rs.bak
-    
-    # Apply SIMD optimizations
-    cat src/whole-image-impl.rs > src/main.rs.simd
-    # Add SIMD implementation
-    echo '
-// Add SIMD optimization for NDVI calculation
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+# Test manual cache-friendly implementation
+echo "----------------------------------------------"
+echo "Testing: Manual optimization approach"
 
-#[cfg(target_arch = "x86_64")]
-fn calculate_ndvi_simd(nir: &[f32], red: &[f32], output: &mut [f32], scale_factor: f32, nodata: f32) {
-    let len = nir.len();
-    let chunks = len / 8;
+# Create a manual optimization version
+cat > src/manual_optimized.rs << 'EOF'
+use gdal::Dataset;
+use gdal::DriverManager;
+use gdal::raster::{RasterCreationOption, Buffer};
+use std::path::Path;
+use std::time::Instant;
+use rayon::prelude::*;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let start = Instant::now();
     
-    // Process 8 elements at a time using AVX
-    unsafe {
-        let scale_factor_vec = _mm256_set1_ps(scale_factor);
-        let offset_vec = _mm256_set1_ps(1000.0);
-        let zero_vec = _mm256_setzero_ps();
-        let nodata_vec = _mm256_set1_ps(nodata);
-        
-        for i in 0..chunks {
-            let idx = i * 8;
+    // Path to data
+    let granule_path = "../data/";
+    let nir_path = format!("{}T33TTG_20250305T100029_B08_10m.jp2", granule_path);
+    let red_path = format!("{}T33TTG_20250305T100029_B04_10m.jp2", granule_path);
+    let output_path = "../output/rust_optimized.tif";
+    
+    // Open datasets
+    println!("Opening datasets...");
+    let nir_ds = Dataset::open(Path::new(&nir_path))?;
+    let red_ds = Dataset::open(Path::new(&red_path))?;
+    
+    // Get dimensions
+    let (width, height) = nir_ds.raster_size();
+    println!("Image size: {}x{}", width, height);
+    
+    // Get bands
+    let nir_band = nir_ds.rasterband(1)?;
+    let red_band = red_ds.rasterband(1)?;
+    
+    // Read the entire image at once
+    println!("Reading entire image...");
+    let nir_data = nir_band.read_as::<f32>(
+        (0, 0), 
+        (width as usize, height as usize),
+        (width as usize, height as usize),
+        None,
+    )?;
+    
+    let red_data = red_band.read_as::<f32>(
+        (0, 0), 
+        (width as usize, height as usize),
+        (width as usize, height as usize),
+        None,
+    )?;
+    
+    // Create output dataset
+    println!("Creating output dataset...");
+    let driver = DriverManager::get_driver_by_name("GTiff")?;
+    let options = vec![
+        RasterCreationOption { key: "COMPRESS", value: "DEFLATE" },
+        RasterCreationOption { key: "TILED", value: "YES" },
+        RasterCreationOption { key: "BIGTIFF", value: "YES" },
+    ];
+    
+    let mut out_ds = driver.create_with_band_type_with_options::<f32, _>(
+        output_path,
+        width as isize,
+        height as isize,
+        1,
+        &options,
+    )?;
+    
+    // Copy projection and geotransform
+    out_ds.set_projection(&nir_ds.projection())?;
+    out_ds.set_geo_transform(&nir_ds.geo_transform()?)?;
+    
+    let mut out_band = out_ds.rasterband(1)?;
+    let nodata_value = -999.0;
+    out_band.set_no_data_value(Some(nodata_value))?;
+    
+    // Calculate NDVI using optimized approach
+    println!("Calculating NDVI...");
+    let nir_vec = nir_data.data;
+    let red_vec = red_data.data;
+    let scale_factor = 10000.0f32;
+    
+    // Create result buffer
+    let mut ndvi_vec = vec![0.0f32; width as usize * height as usize];
+    
+    // Process in larger chunks (cache-friendly)
+    const CHUNK_SIZE: usize = 4096;
+    
+    // Configure workload with better distribution
+    let num_threads = rayon::current_num_threads();
+    let total_pixels = nir_vec.len();
+    let pixels_per_thread = (total_pixels + num_threads - 1) / num_threads;
+    
+    // Process in parallel with optimal chunk sizes
+    ndvi_vec.par_chunks_mut(pixels_per_thread)
+        .enumerate()
+        .for_each(|(chunk_id, ndvi_chunk)| {
+            let start = chunk_id * pixels_per_thread;
+            let end = std::cmp::min(start + pixels_per_thread, total_pixels);
             
-            // Load NIR and RED data
-            let nir_vec = _mm256_loadu_ps(nir.as_ptr().add(idx));
-            let red_vec = _mm256_loadu_ps(red.as_ptr().add(idx));
-            
-            // Apply offset and scale: (val - 1000.0) / scale_factor
-            let nir_scaled = _mm256_div_ps(_mm256_sub_ps(nir_vec, offset_vec), scale_factor_vec);
-            let red_scaled = _mm256_div_ps(_mm256_sub_ps(red_vec, offset_vec), scale_factor_vec);
-            
-            // Calculate sum and diff
-            let sum = _mm256_add_ps(nir_scaled, red_scaled);
-            let diff = _mm256_sub_ps(nir_scaled, red_scaled);
-            
-            // Check if sum > 0
-            let mask = _mm256_cmp_ps(sum, zero_vec, _CMP_GT_OQ);
-            
-            // Calculate NDVI where sum > 0
-            let ndvi = _mm256_div_ps(diff, sum);
-            
-            // Select NDVI or nodata based on mask
-            let result = _mm256_blendv_ps(nodata_vec, ndvi, mask);
-            
-            // Store the result
-            _mm256_storeu_ps(output.as_mut_ptr().add(idx), result);
-        }
-    }
+            // Process each block in this chunk
+            for block_start in (start..end).step_by(CHUNK_SIZE) {
+                let block_end = std::cmp::min(block_start + CHUNK_SIZE, end);
+                let block_size = block_end - block_start;
+                
+                // Process this block
+                for i in 0..block_size {
+                    let global_idx = block_start + i;
+                    let local_idx = i;
+                    
+                    // Compute NDVI
+                    let nir = (nir_vec[global_idx] - 1000.0) / scale_factor;
+                    let red = (red_vec[global_idx] - 1000.0) / scale_factor;
+                    
+                    ndvi_chunk[local_idx] = if nir + red > 0.0 {
+                        (nir - red) / (nir + red)
+                    } else {
+                        nodata_value as f32
+                    };
+                }
+            }
+        });
     
-    // Handle remaining elements
-    let remainder_start = chunks * 8;
-    for i in remainder_start..len {
-        let nir_val = (nir[i] - 1000.0) / scale_factor;
-        let red_val = (red[i] - 1000.0) / scale_factor;
-        
-        output[i] = if nir_val + red_val > 0.0 {
-            (nir_val - red_val) / (nir_val + red_val)
-        } else {
-            nodata
-        };
-    }
-}' >> src/main.rs.simd
+    // Write the entire result at once
+    println!("Writing result...");
+    let band_data = Buffer::new(
+        (width as usize, height as usize),
+        ndvi_vec
+    );
     
-    # Update the main calculation part to use SIMD
-    sed -i 's/ndvi_vec.par_iter_mut().enumerate().for_each(|(i, ndvi)| {/\
-    if cfg!(target_arch = "x86_64") {\
-        if is_x86_feature_detected!("avx2") {\
-            calculate_ndvi_simd(\&nir_vec, \&red_vec, \&mut ndvi_vec, scale_factor, nodata_value as f32);\
-        } else {\
-            ndvi_vec.par_iter_mut().enumerate().for_each(|(i, ndvi)| {/g' src/main.rs.simd
+    out_band.write((0, 0), (width as usize, height as usize), &band_data)?;
     
-    # Close the conditional
-    sed -i 's/});/});\
-        }\
-    } else {\
-        ndvi_vec.par_iter_mut().enumerate().for_each(|(i, ndvi)| {\
-            let nir = (nir_vec[i] - 1000.0) \/ scale_factor;\
-            let red = (red_vec[i] - 1000.0) \/ scale_factor;\
-            \
-            *ndvi = if nir + red > 0.0 {\
-                (nir - red) \/ (nir + red)\
-            } else {\
-                nodata_value as f32\
-            };\
-        });\
-    }/g' src/main.rs.simd
+    out_ds.flush_cache()?;
+    println!("NDVI calculation complete in {:.3}s", start.elapsed().as_secs_f64());
     
-    # Add is_x86_feature_detected macro
-    sed -i '1s/^/#![feature(is_x86_feature_detected)]\n/' src/main.rs.simd
-    
-    # Use the SIMD implementation
-    cp src/main.rs.simd src/main.rs
-    
-    # Build with maximum optimization
-    cargo clean
-    RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat -C codegen-units=1 -C panic=abort" cargo build --release
-    
-    echo "Running SIMD-optimized benchmark..."
-    # Run 3 times and take the average
-    local total_time=0
-    local runs=3
-    
-    for i in $(seq 1 $runs); do
-        echo "Run $i/$runs"
-        start_time=$(date +%s.%N)
-        ./target/release/geo-spectra-calc
-        end_time=$(date +%s.%N)
-        runtime=$(echo "$end_time - $start_time" | bc)
-        total_time=$(echo "$total_time + $runtime" | bc)
-        echo "Time: $runtime seconds"
-    done
-    
-    avg_time=$(echo "scale=3; $total_time / $runs" | bc)
-    echo "Average runtime: $avg_time seconds"
-    
-    # Record results
-    echo "## SIMD-optimized (AVX2) implementation" >> $RESULTS_FILE
-    echo "Flags: \`-C target-cpu=native -C opt-level=3 -C lto=fat -C codegen-units=1 -C panic=abort\`" >> $RESULTS_FILE
-    echo "Average runtime: $avg_time seconds" >> $RESULTS_FILE
-    echo "" >> $RESULTS_FILE
-    
-    # Clean up
-    rm src/main.rs.simd
-fi
+    Ok(())
+}
+EOF
+
+# Use the optimized implementation
+cp src/manual_optimized.rs src/main.rs
+
+# Build with maximum optimization
+cargo clean > /dev/null
+echo "Building with optimized implementation..."
+RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort" cargo build --release > /dev/null
+
+echo "Running manually optimized benchmark..."
+# Run 3 times and take the average
+total_time=0
+runs=3
+
+for i in $(seq 1 $runs); do
+    echo "Run $i/$runs"
+    start_time=$(date +%s.%N)
+    ./target/release/geo-spectra-calc
+    end_time=$(date +%s.%N)
+    runtime=$(echo "$end_time - $start_time" | bc)
+    total_time=$(echo "$total_time + $runtime" | bc)
+    echo "Time: $runtime seconds"
+done
+
+avg_time=$(echo "scale=3; $total_time / $runs" | bc)
+echo "Average runtime: $avg_time seconds"
+
+# Record results
+echo "## Cache-friendly manual optimization" >> $RESULTS_FILE
+echo "Flags: \`-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort\`" >> $RESULTS_FILE
+echo "Average runtime: $avg_time seconds" >> $RESULTS_FILE
+echo "" >> $RESULTS_FILE
+
+# Clean up
+rm src/manual_optimized.rs
 
 # Restore the original implementation
 cp src/main.rs.orig src/main.rs

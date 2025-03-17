@@ -1,0 +1,1 @@
+run scripts from parent dir

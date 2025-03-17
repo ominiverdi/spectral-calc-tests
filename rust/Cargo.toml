@@ -1,0 +1,23 @@
+[package]
+name = "geo-spectra-calc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "Command-line tool for calculating spectral indices from remote sensing data"
+
+[dependencies]
+gdal = { version = "0.15.0", features = ["bindgen"] }
+rayon = "1.10.0"
+libc = "0.2"
+clap = { version = "4.5.4", features = ["derive"] }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false
+
+[profile.dev]
+opt-level = 3  # Use optimization even in debug builds

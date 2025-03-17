@@ -11,9 +11,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Path to data
     let granule_path = "../data/";
-    let nir_path = format!("{}T33TTG_20250305T100029_B8A_20m.jp2", granule_path);
-    let red_path = format!("{}T33TTG_20250305T100029_B04_20m.jp2", granule_path);
-    let output_path = "../output/rust_high_perf.tif";
+    // let nir_path = format!("{}T33TTG_20250305T100029_B8A_20m.jp2", granule_path);
+    // let red_path = format!("{}T33TTG_20250305T100029_B04_20m.jp2", granule_path);
+    let nir_path = format!("{}T33TTG_20250305T100029_B08_10m.jp2", granule_path);
+    let red_path = format!("{}T33TTG_20250305T100029_B04_10m.jp2", granule_path);
+    let output_path = "../output/rust_chunked_parallel.tif";
 
     // Constants
     let scale_factor = 10000.0;
@@ -75,60 +77,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut out_band = out_ds.rasterband(1)?;
     out_band.set_no_data_value(Some(nodata_value))?;
     
-    // Calculate NDVI using all CPU cores
-    println!("Calculating NDVI...");
+    // Calculate NDVI
+    println!("Calculating NDVI in parallel chunks...");
     
     // Determine optimal chunk size based on CPU count
     let num_cpus = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     let chunk_height = (height as usize + num_cpus - 1) / num_cpus;
     
-    // Calculate NDVI
-    (0..height as usize).step_by(chunk_height)
-        .collect::<Vec<_>>()
-        .par_iter()
-        .for_each(|&chunk_start| {
-            let actual_chunk_height = std::cmp::min(chunk_height, height as usize - chunk_start);
-            let start_idx = chunk_start * width as usize;
-            let end_idx = start_idx + actual_chunk_height * width as usize;
+    // Process chunks sequentially but process pixels in each chunk in parallel
+    for chunk_start in (0..height as usize).step_by(chunk_height) {
+        let actual_chunk_height = std::cmp::min(chunk_height, height as usize - chunk_start);
+        let start_idx = chunk_start * width as usize;
+        let end_idx = start_idx + actual_chunk_height * width as usize;
+        
+        let nir_vec = Arc::clone(&nir_vec);
+        let red_vec = Arc::clone(&red_vec);
+        
+        // Create result buffer for this chunk
+        let mut ndvi_chunk = vec![0.0f32; actual_chunk_height * width as usize];
+        
+        // Calculate NDVI for each pixel in the chunk (in parallel)
+        ndvi_chunk.par_iter_mut().enumerate().for_each(|(i, ndvi)| {
+            let global_idx = start_idx + i;
+            let nir = nir_vec[global_idx] / scale_factor as f32;
+            let red = red_vec[global_idx] / scale_factor as f32;
             
-            let nir_vec = Arc::clone(&nir_vec);
-            let red_vec = Arc::clone(&red_vec);
-            
-            // Create result buffer for this chunk
-            let mut ndvi_chunk = Vec::with_capacity(actual_chunk_height * width as usize);
-            
-            // Calculate NDVI for each pixel in the chunk
-            for i in start_idx..end_idx {
-                let nir = nir_vec[i] / scale_factor as f32;
-                let red = red_vec[i] / scale_factor as f32;
-                
-                let ndvi = if nir + red > 0.0 {
-                    (nir - red) / (nir + red)
-                } else {
-                    nodata_value as f32
-                };
-                
-                ndvi_chunk.push(ndvi);
-            }
-            
-            // Write this chunk
-            let band_data = Buffer::new(
-                (width as usize, actual_chunk_height),
-                ndvi_chunk
-            );
-            
-            // Use a mutex to protect writing
-            {
-                out_band.write(
-                    (0, chunk_start as isize), 
-                    (width as usize, actual_chunk_height),
-                    &band_data
-                ).expect("Failed to write chunk");
-            }
-            
-            println!("Processed chunk at y={}, {:.1}% complete", 
-                     chunk_start, (chunk_start as f64 + actual_chunk_height as f64) / height as f64 * 100.0);
+            *ndvi = if nir + red > 0.0 {
+                (nir - red) / (nir + red)
+            } else {
+                nodata_value as f32
+            };
         });
+        
+        // Write this chunk
+        let band_data = Buffer::new(
+            (width as usize, actual_chunk_height),
+            ndvi_chunk
+        );
+        
+        out_band.write(
+            (0, chunk_start as isize), 
+            (width as usize, actual_chunk_height),
+            &band_data
+        )?;
+        
+        println!("Processed chunk at y={}, {:.1}% complete", 
+                 chunk_start, (chunk_start as f64 + actual_chunk_height as f64) / height as f64 * 100.0);
+    }
     
     // Flush and close
     out_ds.flush_cache()?;

@@ -9,10 +9,10 @@ int main(int argc, char *argv[]) {
     GDALAllRegister();
     
     // Paths to your data
-    // const char *nirPath = "../data/T33TTG_20250305T100029_B8A_20m.jp2";
-    // const char *redPath = "../data/T33TTG_20250305T100029_B04_20m.jp2";
-    const char *nirPath = "../data/T33TTG_20250305T100029_B08_10m.jp2";
-    const char *redPath = "../data/T33TTG_20250305T100029_B04_10m.jp2";
+    const char *nirPath = "../data/T33TTG_20250305T100029_B8A_20m.jp2";
+    const char *redPath = "../data/T33TTG_20250305T100029_B04_20m.jp2";
+    // const char *nirPath = "../data/T33TTG_20250305T100029_B08_10m.jp2";
+    // const char *redPath = "../data/T33TTG_20250305T100029_B04_10m.jp2";
     const char *outputPath = "../output/c.tif";
     
     // Open datasets
@@ -30,7 +30,10 @@ int main(int argc, char *argv[]) {
     
     // Create output dataset
     GDALDriverH driver = GDALGetDriverByName("GTiff");
-    GDALDatasetH outDS = GDALCreate(driver, outputPath, width, height, 1, GDT_Float32, NULL);
+    // GDALDatasetH outDS = GDALCreate(driver, outputPath, width, height, 1, GDT_Float32, NULL);
+    //with compression 
+    char* options[] = {"COMPRESS=DEFLATE", "TILED=YES", "BIGTIFF=YES", NULL};
+    GDALDatasetH outDS = GDALCreate(driver, outputPath, width, height, 1, GDT_Float32, options);
     
     if (outDS == NULL) {
         fprintf(stderr, "Error: Could not create output dataset\n");

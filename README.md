@@ -1,4 +1,4 @@
-# spectral-calc-tests Benchmark
+# GeoSpectraCalc Benchmark
 
 This repository compares different programming implementations for calculating spectral indices from remote sensing data, with a focus on the Normalized Difference Vegetation Index (NDVI).
 
@@ -77,9 +77,9 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 
 | Implementation | Runtime (s) | Description |
 |----------------|------------|-------------|
-| C | 0.866 | Direct GDAL C API implementation |
 | Rust (whole-image) | 0.937 | Loads entire image, processes in parallel, single write |
 | Rust (direct-gdal) | 1.161 | Uses direct GDAL C API bindings with chunked processing |
+| C | 2.869 | Direct GDAL C API implementation |
 | Rust (chunked-parallel) | 2.865 | Processes image in chunks with parallel computation per chunk |
 | Bash (gdal_calc.py) | 4.193 | Uses GDAL command-line utilities |
 
@@ -87,10 +87,10 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 
 | Implementation | Runtime (s) | Description |
 |----------------|------------|-------------|
-| C | 2.762 | Direct GDAL C API implementation |
 | Rust (whole-image) | 3.000 | Loads entire image, processes in parallel, single write |
 | Rust (direct-gdal) | 3.817 | Uses direct GDAL C API bindings with chunked processing |
 | Rust (chunked-parallel) | 9.940 | Processes image in chunks with parallel computation per chunk |
+| C | 10.264 | Direct GDAL C API implementation |
 | Bash (gdal_calc.py) | 12.165 | Uses GDAL command-line utilities |
 
 ## License

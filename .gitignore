@@ -17,3 +17,4 @@ target/
 #.idea/
 output/
 data/*.aux.xml
+rust/src/main.rs.bak

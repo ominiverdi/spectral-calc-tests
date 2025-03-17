@@ -8,27 +8,17 @@ OUTPUT_FILE="../output/gdal_calc.tif"
 
 mkdir -p ../output
 
-# Calculate NDVI
-time gdal_calc.py \
- --calc="numpy.where((A+B)>0, (A-B)/(A+B), -999)" \
- -A $NIR_BAND \
- -B $RED_BAND \
- --outfile=$OUTPUT_FILE \
- --NoDataValue=-999 \
- --type=Float32 \
- --co="COMPRESS=DEFLATE" \
- --co="TILED=YES" \
- --overwrite
+
 
 # with correction
 
-# gdal_calc.py \
-#   --calc="numpy.where((A+B)>0, (A/10000.0-B/10000.0)/(A/10000.0+B/10000.0), -999)" \
-#   -A $NIR_BAND \
-#   -B $RED_BAND \
-#   --outfile=ndvi_result_scaled.tif \
-#   --NoDataValue=-999 \
-#   --type=Float32 \
-#   --co="COMPRESS=DEFLATE" \
-#   --co="TILED=YES" \
-#   --overwrite
+time gdal_calc.py \
+  --calc="numpy.where((A+B)>0, (A/10000.0-B/10000.0)/(A/10000.0+B/10000.0), -999)" \
+  -A $NIR_BAND \
+  -B $RED_BAND \
+  --outfile=$OUTPUT_FILE \
+  --NoDataValue=-999 \
+  --type=Float32 \
+  --co="COMPRESS=DEFLATE" \
+  --co="TILED=YES" \
+  --overwrite

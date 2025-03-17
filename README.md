@@ -8,6 +8,7 @@ This repository compares different programming implementations for calculating s
 - C compiler (GCC recommended)
 - Rust (latest stable)
 - Bash
+- GRASS GIS (optional, for comparison)
 
 ## Repository Structure
 
@@ -17,6 +18,7 @@ spectral-calc-tests/
 ├── output/              # Output directory for results
 ├── bash/                # Bash implementation using GDAL utilities
 ├── c/                   # C implementation using GDAL C API
+├── grass/               # GRASS GIS implementation
 └── rust/                # Rust implementations
     ├── src/
     │   ├── direct-gdal-impl.rs    # Direct FFI binding to GDAL C API
@@ -24,7 +26,8 @@ spectral-calc-tests/
     │   └── chunked-parallel-impl.rs  # Process image in chunks with parallel computation
     ├── test-direct.sh
     ├── test-whole-image.sh
-    └── test-chunked-parallel.sh
+    ├── test-chunked-parallel.sh
+    └── test-compiler-flags.sh     # Test various compiler optimizations
 ```
 
 ## Data
@@ -56,6 +59,12 @@ cd bash
 bash calculate_ndvi.sh
 ```
 
+### GRASS GIS Implementation
+```bash
+cd grass
+bash calculate_ndvi.sh
+```
+
 ### Rust Implementations
 ```bash
 cd rust
@@ -67,6 +76,9 @@ bash test-whole-image.sh
 
 # Test chunked parallel implementation
 bash test-chunked-parallel.sh
+
+# Test compiler flag optimizations
+bash test-compiler-flags.sh
 ```
 
 ## Performance Results
@@ -89,6 +101,7 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 |----------------|------------|-------------|
 | Rust (whole-image) | 3.000 | Loads entire image, processes in parallel, single write |
 | Rust (direct-gdal) | 3.817 | Uses direct GDAL C API bindings with chunked processing |
+| GRASS GIS | 8.036 | GRASS r.mapcalc with import/export operations |
 | Rust (chunked-parallel) | 9.940 | Processes image in chunks with parallel computation per chunk |
 | C | 10.264 | Direct GDAL C API implementation |
 | Bash (gdal_calc.py) | 12.165 | Uses GDAL command-line utilities |

@@ -22,6 +22,8 @@ START=$(date +%s.%N)
 
 # Import bands
 echo "Importing NIR and RED bands..."
+# r.import input=../data/T33TTG_20250305T100029_B8A_20m.jp2 output=nir_band
+# r.import input=../data/T33TTG_20250305T100029_B04_20m.jp2 output=red_band
 r.import input=../data/T33TTG_20250305T100029_B08_10m.jp2 output=nir_band
 r.import input=../data/T33TTG_20250305T100029_B04_10m.jp2 output=red_band
 

@@ -91,6 +91,7 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 |----------------|------------|-------------|
 | Rust (whole-image) | 0.937 | Loads entire image, processes in parallel, single write |
 | Rust (direct-gdal) | 1.161 | Uses direct GDAL C API bindings with chunked processing |
+| GRASS GIS | 2.619 | GRASS r.mapcalc with import/export operations |
 | C | 2.869 | Direct GDAL C API implementation |
 | Rust (chunked-parallel) | 2.865 | Processes image in chunks with parallel computation per chunk |
 | Bash (gdal_calc.py) | 4.193 | Uses GDAL command-line utilities |

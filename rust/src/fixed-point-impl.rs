@@ -74,16 +74,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let nodata_value = -10000;  // Represents -1.0 in scaled values
     out_band.set_no_data_value(Some(nodata_value as f64))?;
     
-    // Set metadata in multiple ways to maximize compatibility
+    // Set scale/offset as metadata using GDAL standard metadata keys
     out_band.set_metadata_item("SCALE", "0.0001", "")?;  // 1/scaling_factor
     out_band.set_metadata_item("OFFSET", "0", "")?;
-    out_band.set_metadata_item("scale_factor", "0.0001", "")?;
-    out_band.set_metadata_item("UNIT_TYPE", "NDVI", "")?;
-    out_band.set_description("NDVI")?;
-
-    // Set dataset-level metadata too
-    out_ds.set_metadata_item("NDVI_SCALE_FACTOR", "0.0001", "")?;
-    out_ds.set_metadata_item("TIFFTAG_GDAL_NODATA", &nodata_value.to_string(), "")?;
+    out_band.set_description("NDVI (scaled by 10000)")?;
     
     // Calculate NDVI with fixed-point scaling
     println!("Calculating NDVI...");
@@ -94,17 +88,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create result buffer with i16 type
     let mut ndvi_vec = vec![0i16; width as usize * height as usize];
     
-    // Process the entire image in parallel - normalize output to -1 to 1 range
+    // Process the entire image in parallel
     ndvi_vec.par_iter_mut().enumerate().for_each(|(i, ndvi)| {
         // Apply both scale factor and offset: (DN + offset) / scale_factor
         let nir = (nir_vec[i] - 1000.0) / reflectance_scale;
         let red = (red_vec[i] - 1000.0) / reflectance_scale;
         
         if nir + red > 0.0 {
-            // Calculate NDVI (always between -1 and 1)
+            // Calculate NDVI and convert to fixed-point
             let ndvi_float = (nir - red) / (nir + red);
-            // Clamp to [-0.9999, 0.9999] range to avoid int16 overflow 
-            let clamped_ndvi = ndvi_float.max(-0.9999).min(0.9999);
+            // Clamp to [-1.0, 1.0] range before scaling
+            let clamped_ndvi = ndvi_float.max(-1.0).min(1.0);
             // Scale to fixed-point
             *ndvi = (clamped_ndvi * scaling_factor as f32).round() as i16;
         } else {
@@ -120,22 +114,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     
     out_band.write((0, 0), (width as usize, height as usize), &band_data)?;
-    
-    // Add .aux.xml file with display hints
-    let aux_file = format!("{}.aux.xml", output_path);
-    std::fs::write(&aux_file, format!(r#"<PAMDataset>
-  <PAMRasterBand band="1">
-    <Description>NDVI</Description>
-    <UnitType>NDVI</UnitType>
-    <Metadata>
-      <MDI key="STATISTICS_MINIMUM">-10000</MDI>
-      <MDI key="STATISTICS_MAXIMUM">10000</MDI>
-      <MDI key="SCALE">0.0001</MDI>
-      <MDI key="OFFSET">0</MDI>
-    </Metadata>
-    <ColorInterp>Gray</ColorInterp>
-  </PAMRasterBand>
-</PAMDataset>"#))?;
     
     out_ds.flush_cache()?;
     println!("NDVI calculation complete in {:.3}s", start.elapsed().as_secs_f64());

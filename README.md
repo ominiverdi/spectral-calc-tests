@@ -16,7 +16,7 @@ This repository compares different programming implementations for calculating s
 spectral-calc-tests/
 ├── data/                # Test data from Copernicus Sentinel-2
 ├── output/              # Output directory for results
-├── bash/                # Bash implementation using GDAL utilities
+├── gdal_calc/           # Bash implementation using GDAL utilities
 ├── c/                   # C implementation using GDAL C API
 ├── grass/               # GRASS GIS implementation
 └── rust/                # Rust implementations
@@ -53,7 +53,7 @@ cd c
 bash compile_and_run.sh
 ```
 
-### Bash Implementation
+### Gdal_calc Implementation
 ```bash
 cd bash
 bash calculate_ndvi.sh

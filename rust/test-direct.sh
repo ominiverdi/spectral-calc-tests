@@ -10,6 +10,10 @@ export RUSTFLAGS="-C target-cpu=native -C opt-level=3 -Awarnings"
 # Save the direct implementation
 cat src/direct-gdal-impl.rs > src/main.rs
 
+if ! grep -q "libc" Cargo.toml; then
+     sed -i '/rayon/a libc = "0.2"' Cargo.toml
+fi
+
 # Clean up 
 echo "Cleaning up"
 cargo clean

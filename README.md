@@ -44,10 +44,25 @@ Download these files for the tests:
 
 ## Running Benchmark
 
-...say something and link to BENCHMARK.md ...
+To run all benchmark tests and generate a performance report, use the provided script:
+
+```bash
+chmod +x run_benchmarks.sh
+./run_benchmarks.sh
+```
+
+This script will:
+1. Check for required data files
+2. Run all implementations (C, Rust variants)
+3. Measure execution time and output size
+4. Generate a markdown report in the `benchmark_reports` directory
+
+For more details, see [BENCHMARK.md](BENCHMARK.md).
 
 ## Running Tests
+In addition to the full benchmark, you can run individual tests for each implementation. This allows for fine-tuning specific settings or modifying the code to experiment with optimizations.
 
+Each implementation has its own test script, which can be executed as follows:
 ### C Implementation
 ```bash
 cd c
@@ -78,8 +93,9 @@ bash test-whole-image.sh
 # Test chunked parallel implementation
 bash test-chunked-parallel.sh
 
-# Test compiler flag optimizations
-bash test-compiler-flags.sh
+# Test fixed point implementation
+bash test-fixed-point.sh
+
 ```
 
 ## Performance Results
@@ -101,7 +117,14 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 
 ## Compiler Optimization Results
 
-Tests of different Rust compiler flags on the whole-image implementation (10m resolution):
+Tests of different Rust compiler flags on the whole-image implementation (10m resolution).
+
+```bash
+cd rust
+
+# Test compiler flag optimizations
+bash test-compiler-flags.sh
+```
 
 | Optimization | Flags | Runtime (s) |
 |--------------|-------|-------------|

@@ -28,21 +28,21 @@ echo "Compiling C implementation..."
 # Function to compile and run a Rust implementation
 compile_and_run_rust() {
     local name=$1
-    local impl_file=$2
+    local bin_name=$2    # binary name (e.g., "whole-image-impl")
     local output_file=$3
     
     echo -e "\n${YELLOW}Compiling ${CYAN}$name${YELLOW}...${NC}"
     (cd $SCRIPT_DIR/rust && \
-     cp $impl_file src/main.rs && \
-     cargo build --release --quiet)
+     cargo build --release --bin $bin_name --quiet)
     
     echo -e "${GREEN}Running ${CYAN}$name${GREEN}...${NC}"
     
     start_time=$(date +%s.%N)
-    (cd $SCRIPT_DIR/rust && ./target/release/geo-spectra-calc >/tmp/benchmark_output.log 2>&1)
+    (cd $SCRIPT_DIR/rust && ./target/release/$bin_name >/tmp/benchmark_output.log 2>&1)
     RESULT=$?
     end_time=$(date +%s.%N)
     
+    # Rest of the function remains the same
     if [ $RESULT -ne 0 ]; then
         echo -e "${RED}ERROR: $name failed with code $RESULT${NC}"
         cat /tmp/benchmark_output.log
@@ -109,10 +109,10 @@ run_benchmark() {
 
 # Run benchmarks
 run_benchmark "C" "cd $SCRIPT_DIR/c && ./ndvi_calculator" "$SCRIPT_DIR/output/c.tif"
-compile_and_run_rust "Rust (whole-image)" "src/bin/whole-image-impl.rs" "$SCRIPT_DIR/output/rust_whole_image.tif"
-compile_and_run_rust "Rust (chunked-parallel)" "src/bin/chunked-parallel-impl.rs" "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
-compile_and_run_rust "Rust (fixed-point)" "src/bin/fixed-point-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
-compile_and_run_rust "Rust (direct-gdal)" "src/bin/direct-gdal-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
+compile_and_run_rust "Rust (whole-image)" "whole-image-impl" "$SCRIPT_DIR/output/rust_whole_image.tif"
+compile_and_run_rust "Rust (chunked-parallel)" "chunked-parallel-impl" "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
+compile_and_run_rust "Rust (fixed-point)" "fixed-point-impl" "$SCRIPT_DIR/output/rust_fixed_point.tif"
+compile_and_run_rust "Rust (direct-gdal)" "direct-gdal-impl" "$SCRIPT_DIR/output/rust_direct_gdal.tif"
 
 
 # Optional: GDAL calc test

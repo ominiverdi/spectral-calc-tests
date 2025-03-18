@@ -13,13 +13,6 @@ echo "CPU: $(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d: -f2 | sed 's/
 echo "Number of cores: $(nproc)" >> $RESULTS_FILE
 echo "" >> $RESULTS_FILE
 
-# Set common environment variables
-export GDAL_INCLUDE_DIR=/usr/include/gdal
-export GDAL_LIB_DIR=/usr/lib/x86_64-linux-gnu
-export GDAL_DYNAMIC=YES
-
-
-
 # Define the flags combinations to test
 declare -a RUST_FLAGS_VARIANTS=(
     "-C target-cpu=native -C opt-level=3"

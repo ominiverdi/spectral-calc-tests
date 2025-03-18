@@ -18,9 +18,7 @@ export GDAL_INCLUDE_DIR=/usr/include/gdal
 export GDAL_LIB_DIR=/usr/lib/x86_64-linux-gnu
 export GDAL_DYNAMIC=YES
 
-# Save the current implementation for restoring later
-cp src/main.rs src/main.rs.orig
-cp src/whole-image-impl.rs src/main.rs
+
 
 # Define the flags combinations to test
 declare -a RUST_FLAGS_VARIANTS=(
@@ -49,7 +47,7 @@ run_benchmark() {
     # Clean and rebuild with the specified flags
     cargo clean > /dev/null
     echo "Building with flags..."
-    RUSTFLAGS="$flags" cargo build --release > /dev/null
+    RUSTFLAGS="$flags" cargo build --release  --quiet
     
     echo "Running benchmark..."
     # Run 3 times and take the average
@@ -228,7 +226,7 @@ cp src/manual_optimized.rs src/main.rs
 # Build with maximum optimization
 cargo clean > /dev/null
 echo "Building with optimized implementation..."
-RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort" cargo build --release > /dev/null
+RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C codegen-units=1 -C panic=abort" cargo build --release  --quiet
 
 echo "Running manually optimized benchmark..."
 # Run 3 times and take the average
@@ -256,10 +254,8 @@ echo "" >> $RESULTS_FILE
 
 # Clean up
 rm src/manual_optimized.rs
-
-# Restore the original implementation
-cp src/main.rs.orig src/main.rs
-rm src/main.rs.orig
+rm src/main.rs
+touch src/main.rs
 
 echo "----------------------------------------------"
 echo "Benchmark complete. Results saved to $RESULTS_FILE"

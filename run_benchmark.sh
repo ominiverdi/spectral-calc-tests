@@ -97,11 +97,11 @@ run_benchmark() {
 # Initialize benchmark report
 {
   echo "# GeoSpectraCalc Benchmark Results"
-  echo "Date: $(date)"
-  echo "System: $(hostname)"
-  echo "CPU: $(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d: -f2 | sed 's/^ *//')"
-  echo "Cores: $(grep -c ^processor /proc/cpuinfo) logical, $(lscpu -p | grep -v '^#' | sort -u -t, -k 2,2 | wc -l) physical"
-  echo "Memory: $(grep MemTotal /proc/meminfo | awk '{print int($2/1024/1024)" GB RAM"}')"
+  echo "- **Date:** $(date)"
+  echo "- **System:** $(hostname)"
+  echo "- **CPU:** $(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d: -f2 | sed 's/^ *//')"
+  echo "- **Cores:** $(grep -c ^processor /proc/cpuinfo) logical, $(lscpu -p | grep -v '^#' | sort -u -t, -k 2,2 | wc -l) physical"
+  echo "- **Memory:** $(grep MemTotal /proc/meminfo | awk '{print int($2/1024/1024)" GB RAM"}')"
   echo "## Results"
   echo "| Implementation | Runtime | Output Size |"
   echo "|----------------|---------|------------|"

@@ -7,6 +7,7 @@ This repository compares different programming implementations for calculating s
 - GDAL with development headers
 - C compiler (GCC recommended)
 - Rust (latest stable)
+- Zig compiler (0.11.0 or newer)
 - Bash
 - GRASS GIS (optional, for comparison)
 
@@ -19,15 +20,23 @@ spectral-calc-tests/
 ├── gdal_calc/           # Bash implementation using GDAL utilities
 ├── c/                   # C implementation using GDAL C API
 ├── grass/               # GRASS GIS implementation
-└── rust/                # Rust implementations
+├── rust/                # Rust implementations
+│   ├── src/
+│   │   ├── direct-gdal-impl.rs    # Direct FFI binding to GDAL C API
+│   │   ├── whole-image-impl.rs    # Process entire image at once using Rust GDAL bindings
+│   │   ├── fixed-point-impl.rs    # Fixed-point Int16 implementation
+│   │   └── chunked-parallel-impl.rs  # Process image in chunks with parallel computation
+│   ├── test-direct.sh
+│   ├── test-whole-image.sh
+│   ├── test-chunked-parallel.sh
+│   ├── test-fixed-point.sh
+│   └── test-compiler-flags.sh     # Test various compiler optimizations
+└── zig/                 # Zig implementation with SIMD optimization
     ├── src/
-    │   ├── direct-gdal-impl.rs    # Direct FFI binding to GDAL C API
-    │   ├── whole-image-impl.rs    # Process entire image at once using Rust GDAL bindings
-    │   └── chunked-parallel-impl.rs  # Process image in chunks with parallel computation
-    ├── test-direct.sh
-    ├── test-whole-image.sh
-    ├── test-chunked-parallel.sh
-    └── test-compiler-flags.sh     # Test various compiler optimizations
+    │   ├── main.zig     # SIMD-optimized implementation
+    │   └── empty.c      # Helper for CPU optimization flags
+    ├── build.zig
+    └── build_and_run.sh
 ```
 
 ## Data
@@ -53,7 +62,7 @@ chmod +x run_benchmarks.sh
 
 This script will:
 1. Check for required data files
-2. Run all implementations (C, Rust variants)
+2. Run all implementations (C, Rust variants, Zig)
 3. Measure execution time and output size
 4. Generate a markdown report in the `benchmark_reports` directory
 
@@ -95,7 +104,12 @@ bash test-chunked-parallel.sh
 
 # Test fixed point implementation
 bash test-fixed-point.sh
+```
 
+### Zig Implementation
+```bash
+cd zig
+bash build_and_run.sh
 ```
 
 ## Performance Results
@@ -107,6 +121,7 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 
 | Implementation | Runtime (s) | Description |
 |----------------|------------|-------------|
+| Zig (SIMD) | 2.491 | SIMD-optimized with parallel processing |
 | Rust (fixed-point) | 2.642 | Fixed-point Int16 with scaling factor |
 | Rust (direct-gdal) | 2.735 | Uses direct GDAL C API bindings with chunked processing |
 | Rust (whole-image) | 3.294 | Loads entire image, processes in parallel, single write |

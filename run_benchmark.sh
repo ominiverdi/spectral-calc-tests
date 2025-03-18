@@ -169,5 +169,37 @@ if [ -d "$SCRIPT_DIR/grass" ]; then
   fi
 fi
 
+# Optional: Zig test
+if [ -d "$SCRIPT_DIR/zig" ]; then
+  echo -e "\n${GREEN}Testing ${CYAN}Zig (SIMD)${GREEN}...${NC}"
+  
+  # Build first (not timed)
+  (cd $SCRIPT_DIR/zig && bash build.sh >/dev/null 2>&1)
+  
+  # Run with timing
+  echo -e "Running Zig implementation..."
+  cd $SCRIPT_DIR/zig
+  
+  # Use simple timing approach
+  start_time=$(date +%s.%N)
+  ./main
+  end_time=$(date +%s.%N)
+  
+  runtime=$(echo "$end_time - $start_time" | bc)
+  cd - >/dev/null
+  
+  echo -e "Completed in ${YELLOW}$(printf "%.3fs" $runtime)${NC}"
+  
+  output_file="$SCRIPT_DIR/output/zig_parallel_simd.tif"
+  if [ -f "$output_file" ]; then
+    filesize=$(du -h "$output_file" | cut -f1)
+    echo -e "Output size: ${CYAN}$filesize${NC}"
+  else
+    filesize="N/A"
+  fi
+  
+  echo "| Zig (SIMD) | $(printf "%.3fs" $runtime) | $filesize |" >> "$BENCHMARK_FILE"
+fi
+
 echo -e "\n${GREEN}Benchmark completed successfully${NC}"
 echo -e "Results saved to ${CYAN}$BENCHMARK_FILE${NC}"

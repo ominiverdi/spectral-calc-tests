@@ -32,14 +32,11 @@ spectral-calc-tests/
 
 ## Data
 
-The repository includes test data from Copernicus Sentinel-2:
+The repository includes test data from Copernicus Sentinel-2.
 
-### 20m Resolution (included in repo)
-- `T33TTG_20250305T100029_B8A_20m.jp2` (NIR band)
-- `T33TTG_20250305T100029_B04_20m.jp2` (RED band)
 
 ### 10m Resolution (download required)
-Download these files for higher resolution tests:
+Download these files for the tests:
 - `T33TTG_20250305T100029_B08_10m.jp2` (NIR band): [Download](https://test.lorenzobecchi.com/T33TTG_20250305T100029_B08_10m.jp2)
 - `T33TTG_20250305T100029_B04_10m.jp2` (RED band): [Download](https://test.lorenzobecchi.com/T33TTG_20250305T100029_B04_10m.jp2)
 
@@ -55,7 +52,7 @@ bash compile_and_run.sh
 
 ### Gdal_calc Implementation
 ```bash
-cd bash
+cd gdal_calc
 bash calculate_ndvi.sh
 ```
 
@@ -85,27 +82,18 @@ bash test-compiler-flags.sh
 
 Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) with Sentinel-2 images:
 
-### 20m Resolution (5490×5490 pixels)
-
-| Implementation | Runtime (s) | Description |
-|----------------|------------|-------------|
-| Rust (whole-image) | 0.937 | Loads entire image, processes in parallel, single write |
-| Rust (direct-gdal) | 1.161 | Uses direct GDAL C API bindings with chunked processing |
-| GRASS GIS | 2.619 | GRASS r.mapcalc with import/export operations |
-| C | 2.869 | Direct GDAL C API implementation |
-| Rust (chunked-parallel) | 2.865 | Processes image in chunks with parallel computation per chunk |
-| Bash (gdal_calc.py) | 4.193 | Uses GDAL command-line utilities |
 
 ### 10m Resolution (10980×10980 pixels)
 
 | Implementation | Runtime (s) | Description |
 |----------------|------------|-------------|
-| Rust (whole-image) | 3.000 | Loads entire image, processes in parallel, single write |
-| Rust (direct-gdal) | 3.817 | Uses direct GDAL C API bindings with chunked processing |
-| GRASS GIS | 8.036 | GRASS r.mapcalc with import/export operations |
-| Rust (chunked-parallel) | 9.940 | Processes image in chunks with parallel computation per chunk |
-| C | 10.264 | Direct GDAL C API implementation |
-| Bash (gdal_calc.py) | 12.165 | Uses GDAL command-line utilities |
+| Rust (fixed-point) | 2.642 | Fixed-point Int16 with scaling factor |
+| Rust (direct-gdal) | 2.735 | Uses direct GDAL C API bindings with chunked processing |
+| Rust (whole-image) | 3.294 | Loads entire image, processes in parallel, single write |
+| Rust (chunked-parallel) | 3.422 | Processes image in chunks with parallel computation per chunk |
+| C | 3.517 | Direct GDAL C API implementation |
+| GRASS GIS | 7.993 | GRASS r.mapcalc with import/export operations |
+| Bash (gdal_calc.py) | 14.881 | Uses GDAL command-line utilities |
 
 ## Compiler Optimization Results
 

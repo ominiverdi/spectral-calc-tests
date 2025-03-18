@@ -44,6 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         None,
     )?;
     
+    // Define scaling factor and nodata value for Int16
+    let scaling_factor = 10000;
+    let nodata_value = -10000;  // Represents -1.0 in scaled values
+    
     // Create output dataset - now with Int16 instead of Float32
     println!("Creating output dataset...");
     let driver = DriverManager::get_driver_by_name("GTiff")?;
@@ -67,23 +71,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     out_ds.set_projection(&nir_ds.projection())?;
     out_ds.set_geo_transform(&nir_ds.geo_transform()?)?;
     
+    // Set dataset-level metadata FIRST (before getting the band)
+    out_ds.set_metadata_item("NDVI_SCALE_FACTOR", "0.0001", "")?;
+    out_ds.set_metadata_item("TIFFTAG_GDAL_NODATA", &nodata_value.to_string(), "")?;
+    
+    // Now get the band after setting dataset metadata
     let mut out_band = out_ds.rasterband(1)?;
     
-    // Define scaling factor and nodata value for Int16
-    let scaling_factor = 10000;
-    let nodata_value = -10000;  // Represents -1.0 in scaled values
+    // Set band-level metadata 
     out_band.set_no_data_value(Some(nodata_value as f64))?;
-    
-    // Set metadata in multiple ways to maximize compatibility
     out_band.set_metadata_item("SCALE", "0.0001", "")?;  // 1/scaling_factor
     out_band.set_metadata_item("OFFSET", "0", "")?;
     out_band.set_metadata_item("scale_factor", "0.0001", "")?;
     out_band.set_metadata_item("UNIT_TYPE", "NDVI", "")?;
     out_band.set_description("NDVI")?;
-
-    // Set dataset-level metadata too
-    out_ds.set_metadata_item("NDVI_SCALE_FACTOR", "0.0001", "")?;
-    out_ds.set_metadata_item("TIFFTAG_GDAL_NODATA", &nodata_value.to_string(), "")?;
     
     // Calculate NDVI with fixed-point scaling
     println!("Calculating NDVI...");

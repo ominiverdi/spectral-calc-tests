@@ -3,13 +3,14 @@ const c = @cImport({
     @cInclude("gdal.h");
     @cInclude("cpl_conv.h");
 });
+const rayon = @cImport(@cInclude("rayon.h"));
 
 pub fn main() !void {
     c.GDALAllRegister();
 
     const nir_path = "../data/T33TTG_20250305T100029_B08_10m.jp2";
     const red_path = "../data/T33TTG_20250305T100029_B04_10m.jp2";
-    const output_path = "../output/zig_ndvi.tif";
+    const output_path = "../output/zig_ndvi_fast.tif";
 
     const nir_ds = c.GDALOpen(nir_path, c.GA_ReadOnly);
     const red_ds = c.GDALOpen(red_path, c.GA_ReadOnly);
@@ -31,12 +32,12 @@ pub fn main() !void {
 
     const driver = c.GDALGetDriverByName("GTiff");
     
-    // Add compression options
     var options = [_][*c]u8{
         @constCast("COMPRESS=DEFLATE"), 
         @constCast("TILED=YES"), 
         @constCast("BIGTIFF=YES"), 
         @constCast("NUM_THREADS=ALL_CPUS"), 
+        @constCast("ZLEVEL=9"),  // Maximum compression
         null
     };
 
@@ -86,20 +87,45 @@ pub fn main() !void {
     }
 
     const scaling_factor = 10000.0;
-    const nodata_value: i16 = -10000; // Represents -1.0 in scaled values
+    const nodata_value: i16 = -10000;
 
-    for (0..total_pixels) |i| {
-        const nir = (nir_band[i] - 1000.0) / 10000.0;
-        const red = (red_band[i] - 1000.0) / 10000.0;
+    // Parallel processing with chunked approach
+    const num_threads = @max(std.Thread.getCpuCount() catch 1, 1);
+    const chunk_size = (total_pixels + num_threads - 1) / num_threads;
 
-        const ndvi = if (nir + red > 0) 
-            (nir - red) / (nir + red)
-        else 
-            -1.0;
+    var threads = try allocator.alloc(std.Thread, num_threads);
+    defer allocator.free(threads);
 
-        // Clamp to prevent overflow
-        const clamped_ndvi = @max(@min(ndvi, 0.9999), -0.9999);
-        ndvi_band[i] = @as(i16, @intFromFloat(clamped_ndvi * scaling_factor));
+    for (0..num_threads) |thread_idx| {
+        const start = thread_idx * chunk_size;
+        const end = @min(start + chunk_size, total_pixels);
+
+        threads[thread_idx] = try std.Thread.spawn(.{}, struct {
+            fn threadFunc(
+                nir_data: []const f32, 
+                red_data: []const f32, 
+                ndvi_data: []i16, 
+                start_idx: usize, 
+                end_idx: usize
+            ) void {
+                for (start_idx..end_idx) |i| {
+                    const nir = (nir_data[i] - 1000.0) / 10000.0;
+                    const red = (red_data[i] - 1000.0) / 10000.0;
+
+                    const ndvi = if (nir + red > 0) 
+                        (nir - red) / (nir + red)
+                    else 
+                        -1.0;
+
+                    const clamped_ndvi = @max(@min(ndvi, 0.9999), -0.9999);
+                    ndvi_data[i] = @as(i16, @intFromFloat(clamped_ndvi * scaling_factor));
+                }
+            }
+        }.threadFunc, .{nir_band, red_band, ndvi_band, start, end});
+    }
+
+    for (0..num_threads) |idx| {
+        threads[idx].join();
     }
 
     const out_band = c.GDALGetRasterBand(out_ds, 1);

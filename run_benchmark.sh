@@ -1,240 +1,173 @@
 #!/bin/bash
-set -e
 
-# GeoSpectraCalc Benchmark Runner
-# This script runs all implementations and generates a comprehensive report
-
-# Colors for output
+# Color codes
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+YELLOW='\033[0;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Create directories first
-echo "Creating directories..."
-mkdir -p output
-mkdir -p benchmark_reports
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BENCHMARK_REPORT_DIR="${SCRIPT_DIR}/benchmark_reports"
+BENCHMARK_FILE="${BENCHMARK_REPORT_DIR}/benchmark_$(date +%Y-%m-%d)_$(hostname).md"
 
-# Get date and hostname for report filename
-DATE=$(date +"%Y-%m-%d")
-HOSTNAME=$(hostname)
-REPORT_FILE="benchmark_reports/benchmark_${DATE}_${HOSTNAME}.md"
+mkdir -p output benchmark_reports
 
-# Get system information
-echo "Gathering system information..."
-OS=$(uname -s)
-KERNEL=$(uname -r)
-if [ "$OS" = "Linux" ]; then
-    CPU=$(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d: -f2 | sed 's/^ *//')
-    CPU_CORES=$(grep -c processor /proc/cpuinfo)
-    MEMORY=$(free -h | awk '/^Mem:/ {print $2}')
-    DISTRO=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
-    if [ -z "$DISTRO" ]; then
-        DISTRO="Linux"
+echo -e "${GREEN}===== GeoSpectraCalc Performance Benchmark =====${NC}"
+
+# Set environment variables
+export GDAL_INCLUDE_DIR=/usr/include/gdal
+export GDAL_LIB_DIR=/usr/lib/x86_64-linux-gnu
+export GDAL_DYNAMIC=YES
+export RUSTFLAGS="-C target-cpu=native -C opt-level=3 -Awarnings"
+
+# Prepare C implementation
+echo "Compiling C implementation..."
+(cd $SCRIPT_DIR/c && gcc -Wall -O3 -march=native -o ndvi_calculator calculate_ndvi.c $(gdal-config --cflags) $(gdal-config --libs) >/dev/null 2>&1)
+
+# Function to compile and run a Rust implementation
+compile_and_run_rust() {
+    local name=$1
+    local impl_file=$2
+    local output_file=$3
+    
+    echo -e "\n${YELLOW}Compiling ${CYAN}$name${YELLOW}...${NC}"
+    (cd $SCRIPT_DIR/rust && \
+     cp $impl_file src/main.rs && \
+     cargo build --release --quiet)
+    
+    echo -e "${GREEN}Running ${CYAN}$name${GREEN}...${NC}"
+    
+    start_time=$(date +%s.%N)
+    (cd $SCRIPT_DIR/rust && ./target/release/geo-spectra-calc >/tmp/benchmark_output.log 2>&1)
+    RESULT=$?
+    end_time=$(date +%s.%N)
+    
+    if [ $RESULT -ne 0 ]; then
+        echo -e "${RED}ERROR: $name failed with code $RESULT${NC}"
+        cat /tmp/benchmark_output.log
+        return 1
     fi
-elif [ "$OS" = "Darwin" ]; then
-    CPU=$(sysctl -n machdep.cpu.brand_string)
-    CPU_CORES=$(sysctl -n hw.ncpu)
-    MEMORY=$(sysctl -n hw.memsize | awk '{print $0/1024/1024/1024 " GB"}')
-    DISTRO=$(sw_vers -productName)
-else
-    CPU="Unknown"
-    CPU_CORES="Unknown"
-    MEMORY="Unknown"
-    DISTRO="Unknown"
-fi
-
-# Initialize arrays to store results
-declare -a IMPL_NAMES=()
-declare -a RUNTIMES=()
-declare -a FILESIZE=()
-
-# Function to run a benchmark and record results
-run_benchmark() {
-    local name="$1"
-    local command="$2"
-    local output_file="$3"
     
-    echo -e "${YELLOW}Running benchmark: ${name}${NC}"
-    
-    # Run the benchmark
-    start_time=$(date +%s.%3N)
-    eval "$command"
-    end_time=$(date +%s.%3N)
-    
-    # Calculate runtime
     runtime=$(echo "$end_time - $start_time" | bc)
+    echo -e "Completed in ${YELLOW}$(printf "%.3fs" $runtime)${NC}"
     
-    # Get output file size
     if [ -f "$output_file" ]; then
         filesize=$(du -h "$output_file" | cut -f1)
+        echo -e "Output size: ${CYAN}$filesize${NC}"
     else
         filesize="N/A"
     fi
     
-    # Store results
-    IMPL_NAMES+=("$name")
-    RUNTIMES+=("$runtime")
-    FILESIZE+=("$filesize")
-    
-    echo -e "${GREEN}✓ Completed ${name} in ${runtime}s (Output size: ${filesize})${NC}"
-    echo ""
+    echo "| $name | $(printf "%.3fs" $runtime) | $filesize |" >> "$BENCHMARK_FILE"
 }
 
-# Check for test data
-check_data() {
-    local data_dir="data"
-    local required_files=(
-        "T33TTG_20250305T100029_B08_10m.jp2"
-        "T33TTG_20250305T100029_B04_10m.jp2"
-    )
+# Function to run simple benchmark (for C implementation)
+run_benchmark() {
+    local name=$1
+    local command=$2
+    local output_file=$3
     
-    echo -e "${BLUE}Checking for required data files...${NC}"
+    echo -e "\n${GREEN}Running ${CYAN}$name${GREEN}...${NC}"
     
-    for file in "${required_files[@]}"; do
-        if [ ! -f "${data_dir}/${file}" ]; then
-            echo -e "${RED}Error: Missing required data file: ${data_dir}/${file}${NC}"
-            echo "Please download the required data files as mentioned in the README.md"
-            exit 1
-        fi
-    done
+    start_time=$(date +%s.%N)
+    eval "$command" >/tmp/benchmark_output.log 2>&1
+    RESULT=$?
+    end_time=$(date +%s.%N)
     
-    echo -e "${GREEN}✓ All required data files are present${NC}"
+    if [ $RESULT -ne 0 ]; then
+        echo -e "${RED}ERROR: $name failed with code $RESULT${NC}"
+        cat /tmp/benchmark_output.log
+        return 1
+    fi
+    
+    runtime=$(echo "$end_time - $start_time" | bc)
+    echo -e "Completed in ${YELLOW}$(printf "%.3fs" $runtime)${NC}"
+    
+    if [ -f "$output_file" ]; then
+        filesize=$(du -h "$output_file" | cut -f1)
+        echo -e "Output size: ${CYAN}$filesize${NC}"
+    else
+        filesize="N/A"
+    fi
+    
+    echo "| $name | $(printf "%.3fs" $runtime) | $filesize |" >> "$BENCHMARK_FILE"
 }
 
-# Generate the report header
-generate_report_header() {
-    cat > "$REPORT_FILE" << EOF
-# GeoSpectraCalc Benchmark Results
-
-## System Information
-- **Date:** $(date)
-- **Hostname:** $HOSTNAME
-- **OS:** $DISTRO ($OS $KERNEL)
-- **CPU:** $CPU
-- **CPU Cores:** $CPU_CORES
-- **Memory:** $MEMORY
-
-## Benchmarks
-EOF
-}
-
-# Generate the report table
-generate_report_table() {
-    # Add table header
-    cat >> "$REPORT_FILE" << EOF
-
-| Implementation | Runtime (s) | Output Size | Description |
-|----------------|------------|-------------|-------------|
-EOF
-    
-    # Sort implementations by runtime (fastest first)
-    n=${#IMPL_NAMES[@]}
-    declare -a sorted_indices=($(seq 0 $(($n-1))))
-    
-    # Simple bubble sort
-    for ((i=0; i<n-1; i++)); do
-        for ((j=0; j<n-i-1; j++)); do
-            if (( $(echo "${RUNTIMES[${sorted_indices[$j]}]} > ${RUNTIMES[${sorted_indices[$j+1]}]}" | bc -l) )); then
-                temp=${sorted_indices[$j]}
-                sorted_indices[$j]=${sorted_indices[$j+1]}
-                sorted_indices[$j+1]=$temp
-            fi
-        done
-    done
-    
-    # Add implementations to table (sorted by runtime)
-    for i in "${sorted_indices[@]}"; do
-        local description=""
-        case "${IMPL_NAMES[$i]}" in
-            "C") 
-                description="Standard C implementation using GDAL C API"
-                ;;
-            "Rust (whole-image)") 
-                description="Loads entire image, processes in parallel, single write"
-                ;;
-            "Rust (chunked-parallel)") 
-                description="Processes image in chunks with parallel computation per chunk"
-                ;;
-            "Rust (fixed-point)") 
-                description="Uses Int16 fixed-point optimization for smaller output size"
-                ;;
-            "Rust (direct-gdal)") 
-                description="Uses direct GDAL C API bindings"
-                ;;
-            *) 
-                description="No description available"
-                ;;
-        esac
-        
-        echo "| ${IMPL_NAMES[$i]} | ${RUNTIMES[$i]} | ${FILESIZE[$i]} | $description |" >> "$REPORT_FILE"
-    done
-}
-
-# Main execution starts here
-
-echo -e "${BLUE}=======================================================${NC}"
-echo -e "${BLUE}       GeoSpectraCalc Performance Benchmark           ${NC}"
-echo -e "${BLUE}=======================================================${NC}"
-
-# Check for required data files
-check_data
-
-# Generate report header
-generate_report_header
+# Initialize benchmark report
+{
+  echo "# GeoSpectraCalc Benchmark Results"
+  echo "Date: $(date)"
+  echo "System: $(hostname)"
+  echo "CPU: $(grep 'model name' /proc/cpuinfo | head -n 1 | cut -d: -f2 | sed 's/^ *//')"
+  echo "Cores: $(grep -c ^processor /proc/cpuinfo) logical, $(lscpu -p | grep -v '^#' | sort -u -t, -k 2,2 | wc -l) physical"
+  echo "Memory: $(grep MemTotal /proc/meminfo | awk '{print int($2/1024/1024)" GB RAM"}')"
+  echo "## Results"
+  echo "| Implementation | Runtime | Output Size |"
+  echo "|----------------|---------|------------|"
+} > "$BENCHMARK_FILE"
 
 # Run benchmarks
-echo -e "${BLUE}Running benchmarks...${NC}"
-echo -e "${YELLOW}This may take several minutes. Please be patient.${NC}"
-echo ""
+run_benchmark "C" "cd $SCRIPT_DIR/c && ./ndvi_calculator" "$SCRIPT_DIR/output/c.tif"
+compile_and_run_rust "Rust (whole-image)" "src/whole-image-impl.rs" "$SCRIPT_DIR/output/rust_whole_image.tif"
+compile_and_run_rust "Rust (chunked-parallel)" "src/chunked-parallel-impl.rs" "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
+compile_and_run_rust "Rust (fixed-point)" "src/fixed-point-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
+compile_and_run_rust "Rust (direct-gdal)" "src/direct-gdal-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
 
-# C implementation
-if [ -d "c" ]; then
-    run_benchmark "C" "cd c && bash compile_and_run.sh" "output/c.tif"
+
+# Optional: GDAL calc test
+if [ -d "$SCRIPT_DIR/gdal_calc" ]; then
+  echo -e "\n${GREEN}Running ${CYAN}GDAL calc${GREEN}...${NC}"
+  start_time=$(date +%s.%N)
+  (cd $SCRIPT_DIR/gdal_calc && bash calculate_ndvi.sh >/tmp/benchmark_output.log 2>&1)
+  RESULT=$?
+  end_time=$(date +%s.%N)
+  
+  if [ $RESULT -eq 0 ]; then
+    runtime=$(echo "$end_time - $start_time" | bc)
+    echo -e "Completed in ${YELLOW}$(printf "%.3fs" $runtime)${NC}"
+    
+    output_file="$SCRIPT_DIR/output/gdal_calc.tif"
+    if [ -f "$output_file" ]; then
+      filesize=$(du -h "$output_file" | cut -f1)
+      echo -e "Output size: ${CYAN}$filesize${NC}"
+    else
+      filesize="N/A"
+    fi
+    
+    echo "| GDAL calc | $(printf "%.3fs" $runtime) | $filesize |" >> "$BENCHMARK_FILE"
+  else
+    echo -e "${RED}ERROR: GDAL calc test failed${NC}"
+    cat /tmp/benchmark_output.log
+  fi
 fi
 
-# Rust implementations
-if [ -d "rust" ]; then
-    # Whole-image implementation
-    run_benchmark "Rust (whole-image)" "cd rust && bash test-whole-image.sh" "output/rust_whole_image.tif"
+# Optional: GRASS GIS test
+if [ -d "$SCRIPT_DIR/grass" ]; then
+  echo -e "\n${GREEN}Running ${CYAN}GRASS GIS${GREEN}...${NC}"
+  start_time=$(date +%s.%N)
+  (cd $SCRIPT_DIR/grass && bash calculate_ndvi.sh >/tmp/benchmark_output.log 2>&1)
+  RESULT=$?
+  end_time=$(date +%s.%N)
+  
+  if [ $RESULT -eq 0 ]; then
+    runtime=$(echo "$end_time - $start_time" | bc)
+    echo -e "Completed in ${YELLOW}$(printf "%.3fs" $runtime)${NC}"
     
-    # Chunked-parallel implementation
-    run_benchmark "Rust (chunked-parallel)" "cd rust && bash test-chunked-parallel.sh" "output/rust_chunked_parallel.tif"
+    output_file="$SCRIPT_DIR/output/grass_ndvi.tif"
+    if [ -f "$output_file" ]; then
+      filesize=$(du -h "$output_file" | cut -f1)
+      echo -e "Output size: ${CYAN}$filesize${NC}"
+    else
+      filesize="N/A"
+    fi
     
-    # Fixed-point implementation
-    run_benchmark "Rust (fixed-point)" "cd rust && bash test-fixed-point.sh" "output/rust_fixed_point.tif"
-    
-    # Direct GDAL implementation
-    run_benchmark "Rust (direct-gdal)" "cd rust && bash test-direct.sh" "output/rust_direct_gdal.tif"
+    echo "| GRASS GIS | $(printf "%.3fs" $runtime) | $filesize |" >> "$BENCHMARK_FILE"
+  else
+    echo -e "${RED}ERROR: GRASS GIS test failed${NC}"
+    cat /tmp/benchmark_output.log
+  fi
 fi
 
-# Generate report table
-generate_report_table
-
-echo -e "${GREEN}Benchmark complete! Report saved to: ${REPORT_FILE}${NC}"
-echo ""
-echo -e "${BLUE}Summary of results (fastest to slowest):${NC}"
-
-# Sort and display summary
-n=${#IMPL_NAMES[@]}
-declare -a sorted_indices=($(seq 0 $(($n-1))))
-
-# Simple bubble sort
-for ((i=0; i<n-1; i++)); do
-    for ((j=0; j<n-i-1; j++)); do
-        if (( $(echo "${RUNTIMES[${sorted_indices[$j]}]} > ${RUNTIMES[${sorted_indices[$j+1]}]}" | bc -l) )); then
-            temp=${sorted_indices[$j]}
-            sorted_indices[$j]=${sorted_indices[$j+1]}
-            sorted_indices[$j+1]=$temp
-        fi
-    done
-done
-
-# Display summary
-for i in "${sorted_indices[@]}"; do
-    echo -e "${GREEN}${IMPL_NAMES[$i]}:${NC} ${RUNTIMES[$i]}s (${FILESIZE[$i]})"
-done
-
-echo ""
-echo -e "${BLUE}To view the full report, open:${NC} ${REPORT_FILE}"
+echo -e "\n${GREEN}Benchmark completed successfully${NC}"
+echo -e "Results saved to ${CYAN}$BENCHMARK_FILE${NC}"

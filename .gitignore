@@ -22,3 +22,5 @@ data/T33TTG_20250305T100029_B08_10m.jp2
 data/T33TTG_20250305T100029_B04_10m.jp2
 c/ndvi_calculator
 rust/src/main.rs.orig
+zig/zig-cache/
+zig/zig-out/

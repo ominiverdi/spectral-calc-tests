@@ -24,3 +24,5 @@ c/ndvi_calculator
 rust/src/main.rs.orig
 zig/zig-cache/
 zig/zig-out/
+zig/main
+zig/main.o

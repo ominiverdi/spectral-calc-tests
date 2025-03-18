@@ -109,10 +109,10 @@ run_benchmark() {
 
 # Run benchmarks
 run_benchmark "C" "cd $SCRIPT_DIR/c && ./ndvi_calculator" "$SCRIPT_DIR/output/c.tif"
-compile_and_run_rust "Rust (whole-image)" "src/whole-image-impl.rs" "$SCRIPT_DIR/output/rust_whole_image.tif"
-compile_and_run_rust "Rust (chunked-parallel)" "src/chunked-parallel-impl.rs" "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
-compile_and_run_rust "Rust (fixed-point)" "src/fixed-point-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
-compile_and_run_rust "Rust (direct-gdal)" "src/direct-gdal-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
+compile_and_run_rust "Rust (whole-image)" "src/bin/whole-image-impl.rs" "$SCRIPT_DIR/output/rust_whole_image.tif"
+compile_and_run_rust "Rust (chunked-parallel)" "src/bin/chunked-parallel-impl.rs" "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
+compile_and_run_rust "Rust (fixed-point)" "src/bin/fixed-point-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
+compile_and_run_rust "Rust (direct-gdal)" "src/bin/direct-gdal-impl.rs" "$SCRIPT_DIR/output/rust_fixed_point.tif"
 
 
 # Optional: GDAL calc test

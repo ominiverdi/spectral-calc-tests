@@ -6,7 +6,7 @@ export RUSTFLAGS="-C target-cpu=native -C opt-level=3 -Awarnings"
 
 # Build
 echo "Compiling"
-cargo build --release --bin chunked-parallel-impl
+cargo build --release --bin direct-gdal-impl
 
 echo "Running direct GDAL implementation test..."
 time target/release/direct-gdal-impl

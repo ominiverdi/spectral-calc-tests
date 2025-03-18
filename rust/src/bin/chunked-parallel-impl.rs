@@ -1,4 +1,4 @@
-use gdal::raster::{Buffer, RasterCreationOption};
+use gdal::raster::{Buffer, RasterCreationOptions};
 use gdal::Dataset;
 use gdal::DriverManager;
 use rayon::prelude::*;
@@ -50,37 +50,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // Convert to Arc for efficient sharing
-    let nir_vec = Arc::new(nir_data.data);
-    let red_vec = Arc::new(red_data.data);
+    let nir_vec = Arc::new(nir_data.data());
+    let red_vec = Arc::new(red_data.data());
 
     // Create output dataset first
     println!("Creating output dataset...");
     let driver = DriverManager::get_driver_by_name("GTiff")?;
-    let options = vec![
-        RasterCreationOption {
-            key: "COMPRESS",
-            value: "DEFLATE",
-        },
-        RasterCreationOption {
-            key: "TILED",
-            value: "YES",
-        },
-        RasterCreationOption {
-            key: "BIGTIFF",
-            value: "YES",
-        },
-        RasterCreationOption {
-            key: "NUM_THREADS",
-            value: "ALL_CPUS",
-        },
-    ];
+    let creation_options =
+        RasterCreationOptions::from_iter(["COMPRESS=DEFLATE", "TILED=YES", "NUM_THREADS=ALL_CPUS"]);
 
     let mut out_ds = driver.create_with_band_type_with_options::<f32, _>(
         output_path,
-        width as isize,
-        height as isize,
+        width,
+        height,
         1,
-        &options,
+        &creation_options,
     )?;
 
     // Copy projection and geotransform
@@ -126,12 +110,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
         // Write this chunk
-        let band_data = Buffer::new((width as usize, actual_chunk_height), ndvi_chunk);
+        let mut band_data = Buffer::new((width as usize, actual_chunk_height), ndvi_chunk);
 
         out_band.write(
             (0, chunk_start as isize),
             (width as usize, actual_chunk_height),
-            &band_data,
+            &mut band_data,
         )?;
 
         println!(

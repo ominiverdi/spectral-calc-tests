@@ -1,4 +1,4 @@
-use gdal::raster::{Buffer, RasterCreationOption};
+use gdal::raster::{Buffer, RasterCreationOptions};
 use gdal::Dataset;
 use gdal::DriverManager;
 use rayon::prelude::*;
@@ -46,31 +46,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create output dataset
     println!("Creating output dataset...");
     let driver = DriverManager::get_driver_by_name("GTiff")?;
-    let options = vec![
-        RasterCreationOption {
-            key: "COMPRESS",
-            value: "DEFLATE",
-        },
-        RasterCreationOption {
-            key: "TILED",
-            value: "YES",
-        },
-        RasterCreationOption {
-            key: "BIGTIFF",
-            value: "YES",
-        },
-        RasterCreationOption {
-            key: "NUM_THREADS",
-            value: "ALL_CPUS",
-        },
-    ];
 
+    let creation_options =
+        RasterCreationOptions::from_iter(["COMPRESS=DEFLATE", "TILED=YES", "NUM_THREADS=ALL_CPUS"]);
     let mut out_ds = driver.create_with_band_type_with_options::<f32, _>(
         output_path,
-        width as isize,
-        height as isize,
+        width,
+        height,
         1,
-        &options,
+        &creation_options,
     )?;
 
     // Copy projection and geotransform
@@ -83,8 +67,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Calculate NDVI using optimized approach
     println!("Calculating NDVI...");
-    let nir_vec = nir_data.data;
-    let red_vec = red_data.data;
+    let nir_vec = nir_data.data();
+    let red_vec = red_data.data();
     let scale_factor = 10000.0f32;
 
     // Create result buffer
@@ -131,9 +115,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Write the entire result at once
     println!("Writing result...");
-    let band_data = Buffer::new((width as usize, height as usize), ndvi_vec);
+    let mut band_data = Buffer::new((width as usize, height as usize), ndvi_vec);
 
-    out_band.write((0, 0), (width as usize, height as usize), &band_data)?;
+    out_band.write((0, 0), (width as usize, height as usize), &mut band_data)?;
 
     out_ds.flush_cache()?;
     println!(

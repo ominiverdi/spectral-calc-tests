@@ -4,7 +4,7 @@ const c = @cImport({
     @cInclude("cpl_conv.h");
 });
 
-// Smaller SIMD vector length
+// SIMD vector length - should be a power of 2
 const vector_len = 8;
 
 pub fn main() !void {
@@ -15,7 +15,7 @@ pub fn main() !void {
 
     const nir_path = "../data/T33TTG_20250305T100029_B08_10m.jp2";
     const red_path = "../data/T33TTG_20250305T100029_B04_10m.jp2";
-    const output_path = "../output/zig_simd.tif";
+    const output_path = "../output/zig_parallel_simd.tif";
 
     std.debug.print("Opening input datasets...\n", .{});
     const nir_ds = c.GDALOpen(nir_path, c.GA_ReadOnly);
@@ -88,70 +88,114 @@ pub fn main() !void {
         return error.ReadFailed;
     }
 
-    std.debug.print("Calculating NDVI with SIMD...\n", .{});
+    std.debug.print("Calculating NDVI with parallel SIMD...\n", .{});
     
     // Constants
     const offset: f32 = 1000.0;
     const scale_factor: f32 = 10000.0;
     const nodata_value: i16 = -10000;
     
-    // Create SIMD vectors
-    const offset_vec: @Vector(vector_len, f32) = @splat(offset);
-    const scale_vec: @Vector(vector_len, f32) = @splat(scale_factor);
-
-    // Sequential SIMD processing - no threading for now
-    var i: usize = 0;
-    while (i + vector_len <= total_pixels) {
-        // Load data into vectors
-        var nir_vec: @Vector(vector_len, f32) = undefined;
-        var red_vec: @Vector(vector_len, f32) = undefined;
+    // Setup multi-threading - determine optimal number of threads
+    const cpu_count = try std.Thread.getCpuCount();
+    const thread_count = @min(cpu_count, 16); // Cap at 16 threads
+    std.debug.print("Using {d} threads\n", .{thread_count});
+    
+    // Allocate thread handles
+    var threads = try allocator.alloc(std.Thread, thread_count);
+    defer allocator.free(threads);
+    
+    // Calculate pixels per thread - use large chunks for better cache locality
+    const pixels_per_thread = (total_pixels + thread_count - 1) / thread_count;
+    
+    // Launch threads
+    for (0..thread_count) |thread_idx| {
+        const start_idx = thread_idx * pixels_per_thread;
+        const end_idx = @min(start_idx + pixels_per_thread, total_pixels);
         
-        for (0..vector_len) |j| {
-            nir_vec[j] = nir_band[i + j];
-            red_vec[j] = red_band[i + j];
-        }
+        // Skip if this thread has no work
+        if (start_idx >= end_idx) continue;
         
-        // Apply scale and offset
-        const nir_norm = (nir_vec - offset_vec) / scale_vec;
-        const red_norm = (red_vec - offset_vec) / scale_vec;
-        
-        // Calculate sum
-        const sum = nir_norm + red_norm;
-        
-        // Calculate NDVI
-        const numerator = nir_norm - red_norm;
-        
-        // Process each value based on sum > 0
-        for (0..vector_len) |j| {
-            if (sum[j] > 0.0) {
-                var ndvi = numerator[j] / sum[j];
-                // Clamp
-                ndvi = @max(@min(ndvi, 0.9999), -0.9999);
-                ndvi_band[i + j] = @intFromFloat(ndvi * scale_factor);
-            } else {
-                ndvi_band[i + j] = nodata_value;
+        threads[thread_idx] = try std.Thread.spawn(.{}, struct {
+            fn processChunk(
+                nir_data: []const f32, 
+                red_data: []const f32, 
+                ndvi_data: []i16,
+                start: usize, 
+                end: usize, 
+                vec_len: usize,
+                offset_val: f32,
+                scale_val: f32,
+                nodata_val: i16
+            ) void {
+                // Create SIMD vectors for this thread
+                const offset_vec: @Vector(vector_len, f32) = @splat(offset_val);
+                const scale_vec: @Vector(vector_len, f32) = @splat(scale_val);
+                
+                var pos: usize = start;  // Changed from 'i' to 'pos' to avoid shadowing
+                
+                // Process in SIMD chunks
+                while (pos + vec_len <= end) {
+                    // Load data into vectors
+                    var nir_vec: @Vector(vector_len, f32) = undefined;
+                    var red_vec: @Vector(vector_len, f32) = undefined;
+                    
+                    for (0..vec_len) |j| {
+                        nir_vec[j] = nir_data[pos + j];
+                        red_vec[j] = red_data[pos + j];
+                    }
+                    
+                    // Apply scale and offset
+                    const nir_norm = (nir_vec - offset_vec) / scale_vec;
+                    const red_norm = (red_vec - offset_vec) / scale_vec;
+                    
+                    // Calculate sum and difference
+                    const sum = nir_norm + red_norm;
+                    const diff = nir_norm - red_norm;
+                    
+                    // Process each value 
+                    for (0..vec_len) |j| {
+                        if (sum[j] > 0.0) {
+                            var ndvi = diff[j] / sum[j];
+                            // Clamp
+                            ndvi = @max(@min(ndvi, 0.9999), -0.9999);
+                            ndvi_data[pos + j] = @intFromFloat(ndvi * scale_val);
+                        } else {
+                            ndvi_data[pos + j] = nodata_val;
+                        }
+                    }
+                    
+                    pos += vec_len;
+                }
+                
+                // Handle remaining pixels (fewer than vector_len)
+                while (pos < end) {
+                    const nir = (nir_data[pos] - offset_val) / scale_val;
+                    const red = (red_data[pos] - offset_val) / scale_val;
+                    const sum = nir + red;
+                    
+                    ndvi_data[pos] = if (sum > 0.0) 
+                        blk: {
+                            const ndvi = (nir - red) / sum;
+                            const clamped = @max(@min(ndvi, 0.9999), -0.9999);
+                            break :blk @intFromFloat(clamped * scale_val);
+                        } 
+                    else 
+                        nodata_val;
+                    
+                    pos += 1;
+                }
             }
-        }
-        
-        i += vector_len;
+        }.processChunk, .{
+            nir_band, red_band, ndvi_band, 
+            start_idx, end_idx, vector_len,
+            offset, scale_factor, nodata_value
+        });
     }
     
-    // Handle remaining pixels
-    while (i < total_pixels) {
-        const nir = (nir_band[i] - offset) / scale_factor;
-        const red = (red_band[i] - offset) / scale_factor;
-        const sum = nir + red;
-        
-        ndvi_band[i] = if (sum > 0.0) 
-            blk: {
-                const ndvi = (nir - red) / sum;
-                const clamped = @max(@min(ndvi, 0.9999), -0.9999);
-                break :blk @intFromFloat(clamped * scale_factor);
-            } 
-        else 
-            nodata_value;
-        
-        i += 1;
+    // Wait for all threads to complete
+    std.debug.print("Waiting for threads to complete...\n", .{});
+    for (threads) |thread| {
+        thread.join();
     }
 
     std.debug.print("Writing output...\n", .{});

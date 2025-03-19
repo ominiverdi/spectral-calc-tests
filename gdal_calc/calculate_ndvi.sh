@@ -10,7 +10,7 @@ OUTPUT_FILE="../output/gdal_calc.tif"
 if command -v gdal_calc &> /dev/null; then
   GDAL_CALC="gdal_calc"
 else
-  GDAL_CALC=="gdal_calc.py"
+  GDAL_CALC="gdal_calc.py"
 fi
 
 mkdir -p ../output

@@ -10,15 +10,13 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BENCHMARK_REPORT_DIR="${SCRIPT_DIR}/benchmark_reports"
 BENCHMARK_FILE="${BENCHMARK_REPORT_DIR}/benchmark_$(date +%Y-%m-%d)_$(hostname).md"
+LC_ALL=C
 
 mkdir -p output benchmark_reports
 
 echo -e "${GREEN}===== GeoSpectraCalc Performance Benchmark =====${NC}"
 
 # Set environment variables
-export GDAL_INCLUDE_DIR=/usr/include/gdal
-export GDAL_LIB_DIR=/usr/lib/x86_64-linux-gnu
-export GDAL_DYNAMIC=YES
 export RUSTFLAGS="-C target-cpu=native -C opt-level=3 -Awarnings"
 
 # Prepare C implementation
@@ -109,10 +107,11 @@ run_benchmark() {
 
 # Run benchmarks
 run_benchmark "C" "cd $SCRIPT_DIR/c && ./ndvi_calculator" "$SCRIPT_DIR/output/c.tif"
-compile_and_run_rust "Rust (whole-image)" "whole-image-impl" "$SCRIPT_DIR/output/rust_whole_image.tif"
-compile_and_run_rust "Rust (chunked-parallel)" "chunked-parallel-impl" "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
-compile_and_run_rust "Rust (fixed-point)" "fixed-point-impl" "$SCRIPT_DIR/output/rust_fixed_point.tif"
-compile_and_run_rust "Rust (direct-gdal)" "direct-gdal-impl" "$SCRIPT_DIR/output/rust_direct_gdal.tif"
+compile_and_run_rust "Rust (whole-image)" whole-image-impl "$SCRIPT_DIR/output/rust_whole_image.tif"
+compile_and_run_rust "Rust (chunked-parallel)" chunked-parallel-impl "$SCRIPT_DIR/output/rust_chunked_parallel.tif"
+compile_and_run_rust "Rust (fixed-point)" fixed-point-impl "$SCRIPT_DIR/output/rust_fixed_point.tif"
+compile_and_run_rust "Rust (direct-gdal)" direct-gdal-impl "$SCRIPT_DIR/output/rust_direct_gdal.tif"
+compile_and_run_rust "Rust (parallel-io)" parallel-io "$SCRIPT_DIR/output/rust_parallel_io.tif"
 
 
 # Optional: GDAL calc test

@@ -7,6 +7,11 @@ RED_BAND="../data/T33TTG_20250305T100029_B08_10m.jp2"
 
 OUTPUT_FILE="../output/gdal_calc.tif"
 
+if command -v gdal_calc &> /dev/null; then
+  GDAL_CALC="gdal_calc"
+else
+  GDAL_CALC=="gdal_calc.py"
+fi
 
 mkdir -p ../output
 
@@ -14,7 +19,7 @@ mkdir -p ../output
 
 # with correction
 
-time gdal_calc.py \
+time $GDAL_CALC \
   --calc="numpy.where(((A-1000)/10000.0+(B-1000)/10000.0)>0, ((A-1000)/10000.0-(B-1000)/10000.0)/((A-1000)/10000.0+(B-1000)/10000.0), -999)" \
   -A $NIR_BAND \
   -B $RED_BAND \

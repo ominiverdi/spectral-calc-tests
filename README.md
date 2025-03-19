@@ -121,14 +121,15 @@ Tests performed on an Intel Core i9-10900 CPU @ 2.80GHz (10 cores, 20 threads) w
 
 | Implementation | Runtime (s) | Description |
 |----------------|------------|-------------|
-| Zig (SIMD) | 2.491 | SIMD-optimized with parallel processing |
-| Rust (fixed-point) | 2.642 | Fixed-point Int16 with scaling factor |
-| Rust (direct-gdal) | 2.735 | Uses direct GDAL C API bindings with chunked processing |
-| Rust (whole-image) | 3.294 | Loads entire image, processes in parallel, single write |
-| Rust (chunked-parallel) | 3.422 | Processes image in chunks with parallel computation per chunk |
+| Rust (parallel-io) | 2.235 | Rough parallel I/O implementation |
+| Zig (SIMD) | 2.592 | SIMD-optimized with parallel processing |
+| Rust (direct-gdal) | 2.588 | Uses direct GDAL C API bindings with chunked processing |
+| Rust (fixed-point) | 2.621 | Fixed-point Int16 with scaling factor |
+| Rust (whole-image) | 3.111 | Loads entire image, processes in parallel, single write |
+| Rust (chunked-parallel) | 3.306 | Processes image in chunks with parallel computation per chunk |
 | C | 3.517 | Direct GDAL C API implementation |
-| GRASS GIS | 7.993 | GRASS r.mapcalc with import/export operations |
-| Bash (gdal_calc.py) | 12.806 | Uses GDAL command-line utilities |
+| GRASS GIS | 8.307 | GRASS r.mapcalc with import/export operations |
+| Bash (gdal_calc.py) | 13.355 | Uses GDAL command-line utilities |
 
 ## Compiler Optimization Results
 
